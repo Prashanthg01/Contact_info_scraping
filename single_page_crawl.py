@@ -61,7 +61,7 @@ def extract_addresses(text):
     return parsed_addresses
 
 def extract_addresses_two(text):
-    # A simple regex for finding addresses, this can be improved
+    # A simple regex for finding addresses
     address_regex = r'\d{1,5}\s\w+\s\w+.*'
     output = re.findall(address_regex, text)
     if not output:
