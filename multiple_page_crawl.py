@@ -110,9 +110,6 @@ for url in product_urls:
     # Extract contact information from sub-pages of the main URL
 
     main_page_links = remove_duplicates(main_page_links)
-    print("------------------Strat-----------------")
-    print("main_page_links", main_page_links)
-    print("------------------End-----------------")
     for link in main_page_links:
         if link and not link.startswith(('mailto:', 'tel:', 'http://', 'https://', '#', 'javascript:')):
             # Construct absolute URL
@@ -136,8 +133,6 @@ for url in product_urls:
             # Append extracted data to the list
             data.append([absolute_url, emails, phone_numbers, addresses])
             
-            print("Data:", absolute_url, emails, phone_numbers, addresses)
-
 # Close the WebDriver
 driver.quit()
 
