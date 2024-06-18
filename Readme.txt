@@ -19,4 +19,8 @@ python main.py
 Enter 1 to crawl data form single page
 Enter 2 to crawl data from multiple pages
 
-I Agree extracting Address Data is poor, But it can be improved to have move than 90% accuracy by integrating AI tools or Python libraries
+Using Docker (if the above commands fail or do not work properly)
+docker-compose up --build
+"This is will run single page crawl"
+
+I acknowledge that extracting address data may currently be less accurate. However, it can be significantly improved to achieve over 90% accuracy by integrating AI tools or advanced Python libraries
