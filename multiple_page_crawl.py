@@ -1,145 +1,89 @@
-from pyparsing import *
-import pandas as pd
-import re
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
+import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse
+import re
+import pandas as pd
+from urllib.parse import urljoin
 
-# Define functions to extract emails, phone numbers, and addresses using regex
 def extract_emails(text):
     email_regex = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b'
     return re.findall(email_regex, text)
 
 def extract_phone_numbers(text):
     phone_regex = r'(\b\d{3}[-.\s]??\d{3}[-.\s]??\d{4}\b|\(\d{3}\)\s*\d{3}[-.\s]??\d{4}|\b\d{3}[-.\s]??\d{4}\b)'
-    return re.findall(phone_regex, text)
+    return [phone[0] for phone in re.findall(phone_regex, text)]
 
 def extract_addresses(text):
-    # Define grammars for German and English addresses
-    german_word = Word("ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ", alphas + "ß")
-    german_word_compound = german_word + ZeroOrMore(Optional(Literal("-")) + german_word)
-    german_name = german_word_compound
-    german_street = german_word_compound
-    german_house_number = Word(nums) + Optional(Word(alphas, exact=1) + FollowedBy(White()))
-    german_address_separator = Suppress(Literal(",") | Literal("in"))
-    german_postal_code = Word(nums, exact=5)
-    german_town = german_word_compound
-    german_address = german_name + german_address_separator + german_street + german_house_number \
-        + german_address_separator + german_postal_code + german_town
-
-    english_word = Word("ABCDEFGHIJKLMNOPQRSTUVWXYZ", alphanums)
-    english_number = Word(nums)
-    english_word_compound = OneOrMore(english_word)
-    english_extension = Word("-/", exact=1) + (english_word_compound | english_number)
-    english_address_separator = Suppress(Literal(","))
-    english_floor = (Literal("1st") | Literal("2nd") | Literal("3rd") | Combine(english_number + Literal("th"))) + Literal("Floor")
-    english_where = english_word_compound
-    english_street = english_word_compound
-    english_address = english_word_compound + Optional(english_extension) \
-        + english_address_separator + Optional(english_floor) \
-        + Optional(english_address_separator + english_where) \
-        + Optional(english_address_separator + english_where) \
-        + english_address_separator + english_street + english_address_separator + english_number
-
-    # Combine both grammars
-    address = english_address | german_address
-
-    # Parse the input text
-    parsed_addresses = []
-    for addr, _, _ in address.scanString(text):
-        address_sentence = " ".join(addr.asList())
-        parsed_addresses.append(address_sentence)
+    address_regex = r"([0-9]{1,5})(.{5,75})((?:Ala(?:(?:bam|sk)a)|American Samoa|Arizona|Arkansas|(?:^(?!Baja )California)|Colorado|Connecticut|Delaware|District of Columbia|Florida|Georgia|Guam|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Miss(?:(?:issipp|our)i)|Montana|Nebraska|Nevada|New (?:Hampshire|Jersey|Mexico|York)|North (?:(?:Carolin|Dakot)a)|Ohio|Oklahoma|Oregon|Pennsylvania|Puerto Rico|Rhode Island|South (?:(?:Carolin|Dakot)a)|Tennessee|Texas|Utah|Vermont|Virgin(?:ia| Island(s?))|Washington|West Virginia|Wisconsin|Wyoming|A[KLRSZ]|C[AOT]|D[CE]|FL|G[AU]|HI|I[ADLN]|K[SY]|LA|M[ADEINOST]|N[CDEHJMVY]|O[HKR]|P[AR]|RI|S[CD]|T[NX]|UT|V[AIT]|W[AIVY])).{1,2}([0-9]{5})"
+    addresses = re.findall(address_regex, text)
     
-    if not parsed_addresses:
-        parsed_addresses = extract_addresses_two(text)
-    return parsed_addresses
+    formatted_addresses = []
+    for address in addresses:
+        out_address = " ".join(address)
+        out_address = " ".join(out_address.split())
+        formatted_addresses.append(out_address)
+    
+    return formatted_addresses
 
-def extract_addresses_two(text):
-    # A simple regex for finding addresses, this can be improved
-    address_regex = r'\d{1,5}\s\w+\s\w+.*'
-    output = re.findall(address_regex, text)
-    if not output:
-        output = extract_addresses_three(text)
-    return output
-
-def extract_addresses_three(text):
-    # Improved regex for finding addresses
-    address_regex = r'\b\d{1,5}\s(?:\w+\.?\s?)+?(?:Street|St|Avenue|Ave|Boulevard|Blvd|Road|Block|Floor|Rd|Drive|Dr|Lane|Ln|Way|Wy|Court|Ct|Plaza|Plz|Circle|Cir|Block|BDA|Yard|RMC|APMC|Floor|City|Suite|CA|DCB)\s?(?:\w+\.?\s?)*?\b'
-    return re.findall(address_regex, text)
-
-def get_links_from_page(driver, url):
-    driver.get(url)
-    # Wait for the page to load
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-    # Extract page source and parse with BeautifulSoup
-    soup = BeautifulSoup(driver.page_source, 'html.parser')
-    # Find all links on the page
+def get_links_from_page(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to retrieve the webpage: {url}. Error: {e}")
+        return []
+    
+    soup = BeautifulSoup(response.content, 'html.parser')
     links = [link.get('href') for link in soup.find_all('a', href=True)]
     return links
 
-def remove_duplicates(input_list):
-    # Convert the list to a set to remove duplicates
-    unique_set = set(input_list)
-    # Convert the set back to a list
-    unique_list = list(unique_set)
-    return unique_list
+def crawl_contact_info(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to retrieve the webpage: {url}. Error: {e}")
+        return [], [], []
+    
+    soup = BeautifulSoup(response.content, 'html.parser')
+    text = soup.get_text()
+    
+    emails = extract_emails(text)
+    phones = extract_phone_numbers(text)
+    addresses = extract_addresses(text)
+    
+    return emails, phones, addresses
 
-# Read the product URLs from CSV
-products_df = pd.read_csv('input_urls_list.csv')
-product_urls = products_df['URLs'].tolist()
+def main():
+    input_file = 'input_urls_list.csv'
+    output_file = 'output_contact_info.csv'
+    
+    urls_df = pd.read_csv(input_file, header=None, names=['url'])
+    results = []
+    
+    for index, row in urls_df.iterrows():
+        url = row['url'].strip()
+        
+        if not url.startswith(('http://', 'https://')):
+            url = 'https://' + url
+        
+        main_page_links = get_links_from_page(url)
+        main_page_links = list(set(main_page_links))  # Remove duplicates
+        
+        for link in main_page_links:
+            print("---------link----------", link)
+            if link and not link.startswith(('mailto:', 'tel:', '#', 'javascript:')):
+                absolute_url = urljoin(url, link)
+                emails, phones, addresses = crawl_contact_info(absolute_url)
+                results.append({
+                    'url': absolute_url,
+                    'emails': ', '.join(emails),
+                    'phones': ', '.join(phones),
+                    'addresses': ', '.join(addresses)
+                })
+    
+    results_df = pd.DataFrame(results)
+    results_df.to_csv(output_file, index=False)
+    print(f"Contact info saved to {output_file}")
 
-# Set up Selenium WebDriver with Chrome
-options = Options()
-options.headless = True  # Run headless Chrome
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-
-# List to store the extracted data
-data = []
-
-# Iterate over each URL
-for url in product_urls:
-    # Get links from the main page
-    main_page_links = get_links_from_page(driver, url)
-
-    # Extract contact information from sub-pages of the main URL
-
-    main_page_links = remove_duplicates(main_page_links)
-    for link in main_page_links:
-        if link and not link.startswith(('mailto:', 'tel:', 'http://', 'https://', '#', 'javascript:')):
-            # Construct absolute URL
-            absolute_url = urljoin(url, link)
-            # Get page text
-            driver.get(absolute_url)
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-            soup = BeautifulSoup(driver.page_source, 'html.parser')
-            page_text = soup.get_text(separator=' ')
-            
-            # Extract contact details
-            emails = extract_emails(page_text)
-            phone_numbers = extract_phone_numbers(page_text)
-            addresses = extract_addresses(page_text)
-            
-            # Use only unique values
-            emails = ', '.join(set(emails)) if emails else "Not found"
-            phone_numbers = ', '.join(set(phone_numbers)) if phone_numbers else "Not found"
-            addresses = ', '.join(set(addresses)) if addresses else "Not found"
-            
-            # Append extracted data to the list
-            data.append([absolute_url, emails, phone_numbers, addresses])
-            
-# Close the WebDriver
-driver.quit()
-
-# Create a DataFrame from the data
-output_df = pd.DataFrame(data, columns=['URL', 'Email', 'Phone Number', 'Address'])
-
-# Save the DataFrame to a CSV file
-output_df.to_csv('output_contact_info.csv', index=False)
-
-print("Scraping completed and data saved to 'output_contact_info.csv'.")
+if __name__ == '__main__':
+    main()
