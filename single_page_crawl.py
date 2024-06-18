@@ -36,9 +36,6 @@ def crawl_contact_info(url):
     
     emails = extract_emails(text)
     phones = extract_phone_numbers(text)
-    print("--------------Start---------------")
-    print(phones)
-    print("---------------End-------------------")
     
     addresses = extract_addresses(text)
     
